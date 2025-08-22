@@ -63,7 +63,7 @@ class _TimerPageState extends State<TimerPage> {
     final secs = _seconds % 60;
 
     return Scaffold(
-      appBar: AppBar(title: const Text("无限计时器")),
+      appBar: AppBar(title: const Text("计时器")),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
