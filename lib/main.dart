@@ -26,41 +26,69 @@ class TimerPage extends StatefulWidget {
   State<TimerPage> createState() => _TimerPageState();
 }
 
-class _TimerPageState extends State<TimerPage> {
-  int _seconds = 0;
+class _TimerPageState extends State<TimerPage> with WidgetsBindingObserver {
+  DateTime? _startTime; // 计时开始时间
+  Duration _elapsed = Duration.zero; // 已经过的时间
   Timer? _timer;
+  bool _isRunning = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  // App 生命周期变化处理（切后台/前台）
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _isRunning && _startTime != null) {
+      // 回到前台时，重新计算开始时间，保持计时连续
+      _startTime = DateTime.now().subtract(_elapsed);
+    }
+  }
 
   void _startTimer() {
-    _timer?.cancel(); // 避免重复启动
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      setState(() {
-        _seconds++;
+    if (!_isRunning) {
+      _startTime = DateTime.now().subtract(_elapsed);
+      _timer?.cancel();
+      _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+        setState(() {
+          _elapsed = DateTime.now().difference(_startTime!);
+        });
       });
-    });
+      _isRunning = true;
+    }
   }
 
   void _stopTimer() {
-    _timer?.cancel();
+    if (_isRunning) {
+      _timer?.cancel();
+      _elapsed = DateTime.now().difference(_startTime!);
+      _isRunning = false;
+    }
   }
 
   void _resetTimer() {
     _timer?.cancel();
     setState(() {
-      _seconds = 0;
+      _elapsed = Duration.zero;
+      _startTime = null;
+      _isRunning = false;
     });
   }
 
   @override
-  void dispose() {
-    _timer?.cancel(); // 页面销毁时停止定时器
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final hours = _seconds ~/ 3600;
-    final minutes = (_seconds % 3600) ~/ 60;
-    final secs = _seconds % 60;
+    final hours = _elapsed.inHours;
+    final minutes = (_elapsed.inMinutes % 60);
+    final seconds = (_elapsed.inSeconds % 60);
 
     return Scaffold(
       appBar: AppBar(title: const Text("计时器")),
@@ -71,7 +99,7 @@ class _TimerPageState extends State<TimerPage> {
             Text(
               "${hours.toString().padLeft(2, '0')}:"
               "${minutes.toString().padLeft(2, '0')}:"
-              "${secs.toString().padLeft(2, '0')}",
+              "${seconds.toString().padLeft(2, '0')}",
               style: const TextStyle(fontSize: 48, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 30),
