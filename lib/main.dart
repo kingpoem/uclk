@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   runApp(const MyApp());
@@ -27,8 +28,8 @@ class TimerPage extends StatefulWidget {
 }
 
 class _TimerPageState extends State<TimerPage> with WidgetsBindingObserver {
-  DateTime? _startTime; // 计时开始时间
-  Duration _elapsed = Duration.zero; // 已经过的时间
+  DateTime? _startTime;
+  Duration _elapsed = Duration.zero;
   Timer? _timer;
   bool _isRunning = false;
 
@@ -36,6 +37,7 @@ class _TimerPageState extends State<TimerPage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _loadState(); // 读取存储的状态
   }
 
   @override
@@ -45,26 +47,54 @@ class _TimerPageState extends State<TimerPage> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  // App 生命周期变化处理（切后台/前台）
+  // 生命周期监听
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _isRunning && _startTime != null) {
-      // 回到前台时，重新计算开始时间，保持计时连续
-      _startTime = DateTime.now().subtract(_elapsed);
+    if (state == AppLifecycleState.resumed) {
+      _loadState();
+    }
+  }
+
+  Future<void> _loadState() async {
+    final prefs = await SharedPreferences.getInstance();
+    final startMillis = prefs.getInt('startTime');
+    final elapsedMillis = prefs.getInt('elapsed') ?? 0;
+    final running = prefs.getBool('isRunning') ?? false;
+
+    setState(() {
+      _elapsed = Duration(milliseconds: elapsedMillis);
+      _isRunning = running;
+      if (startMillis != null) {
+        _startTime = DateTime.fromMillisecondsSinceEpoch(startMillis);
+      }
+    });
+
+    if (_isRunning && _startTime != null) {
+      _startTimer();
+    }
+  }
+
+  Future<void> _saveState() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('elapsed', _elapsed.inMilliseconds);
+    await prefs.setBool('isRunning', _isRunning);
+    if (_startTime != null) {
+      await prefs.setInt('startTime', _startTime!.millisecondsSinceEpoch);
     }
   }
 
   void _startTimer() {
     if (!_isRunning) {
       _startTime = DateTime.now().subtract(_elapsed);
-      _timer?.cancel();
-      _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-        setState(() {
-          _elapsed = DateTime.now().difference(_startTime!);
-        });
-      });
       _isRunning = true;
+      _saveState();
     }
+    _timer?.cancel();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      setState(() {
+        _elapsed = DateTime.now().difference(_startTime!);
+      });
+    });
   }
 
   void _stopTimer() {
@@ -72,26 +102,31 @@ class _TimerPageState extends State<TimerPage> with WidgetsBindingObserver {
       _timer?.cancel();
       _elapsed = DateTime.now().difference(_startTime!);
       _isRunning = false;
+      _saveState();
+      setState(() {});
     }
   }
 
-  void _resetTimer() {
+  void _resetTimer() async {
     _timer?.cancel();
     setState(() {
       _elapsed = Duration.zero;
       _startTime = null;
       _isRunning = false;
     });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.clear(); // 清空存储
   }
 
   @override
   Widget build(BuildContext context) {
+    // final days = _elapsed.inDays;
     final hours = _elapsed.inHours;
-    final minutes = (_elapsed.inMinutes % 60);
-    final seconds = (_elapsed.inSeconds % 60);
+    final minutes = _elapsed.inMinutes % 60;
+    final seconds = _elapsed.inSeconds % 60;
 
     return Scaffold(
-      appBar: AppBar(title: const Text("计时器")),
+      // appBar: AppBar(title: const Text("计时器")),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
